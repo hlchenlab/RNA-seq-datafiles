@@ -133,28 +133,5 @@ SplitBAM <- function(split_indir,split_outdir, split_parallel_threads){
     }
   }
 }
-##Running operation
-#source("Alignment-params.txt")
-setwd(home_dir)
-
-environ_set_up()
-
-for (i in studies) {
-  setwd(i)
-  if(Do_STAR == "yes"){
-    mapRNAStudies(inputdir,study=i, IDX, star_outdir, parallel_threads =1) 
-  }
-  if(RM_duplicates_from_BAMs == "yes"){
-    dir.create(temp)
-    Add_ReadGroups(star_outdir,STARthreads)
-    rmdupPCR(star_outdir,rmdupdir)
-    unlink(temp, recursive=TRUE)
-    print(paste("for", i , "Reads deduplicated and Read groups assigned successfully!"))
-  }
-  if(Do_chromosome_subset =="unmapped" | Do_chromosome_subset == "ByChromosome"){
-    SplitBAM(split_indir,split_outdir)
-  }
-  setwd("..")
-}
   
 

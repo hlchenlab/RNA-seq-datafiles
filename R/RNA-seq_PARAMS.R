@@ -21,9 +21,11 @@ samtools <- '/software/samtools/1.14/bin/samtools'
 picard <- "/software/Picard/2.25.2/picard.jar"
 gatk <- "/software/gatk/4.2.5.0/gatk"
 STAR <- '/software/STAR/2.7.9a/bin/STAR'
+fastqc.path = "/software/FastQC/0.11.9/fastqc"
 bamtools ="/software/bamtools/2.5.1/bin/bamtools"
-snpEff = "/home/conor93/snpEff"
+snpEff <- "/home/conor93/snpEff"
 zip7 <- "/software/7-Zip/16.02/bin/7z"
+work_dir <- "RNA-Seq-datafiles/R"
 
 home_dir ="/home/hlchen/Conor/Studies/IAV" 
 studies = "GSE156060"
@@ -33,16 +35,64 @@ inputdir = "fastq"
 ################RNA-seq Parameters#####################
 
 if(Do_FasQC_1 =="yes"){ 
+  source(paste0(work_dir,"/FastQC.R"))
 ###################FastQC#############################
-  fastqc.path = "/software/FastQC/0.11.9/fastqc"
   fastqc_threads = 8
   fastqc_out ="QC"
+##############Running operation#######################
+  setwd(home_dir)
+  
+  environ_set_up()
+  
+  for (i in studies) {
+    setwd(i)
+    if(Do_FasQC_1 == "yes"){
+      FastQC_analysis(inputdir ='fastq',fastqc_out, fastqc_threads,report_out ="yes") 
+    }
+    if(Do_FastQC_Trim == "yes"){
+      Trim_Fastq(inputdir ='fastq', trimoutdir = 'FastqTrim')
+    }
+    setwd("..")
+  }
 }
 ######################################################
 
-if(Do_STAR =="yes"){
-####Star Alignment Parameters (Change if necessary)####
+###############Post-Alignment-Processing##################
+
+if(RM_duplicates_from_BAMs == "yes"){
+  source(paste0(work_dir,"/STARscript.R"))
+  ###############Deduplication of BAMs######################
   
+  rmdup_threads = 5
+  temp = "tempdir"
+  rmdupdir ="RMDups"
+  rmdup_params <- paste("--remove-sequencing-duplicates true",
+                        paste0("--conf \'spark.executor.cores=",rmdup_threads,"\'"),
+                        paste0("--conf \'spark.local.dir=",temp,"\'"),
+                        paste0("--conf \'spark.executor.instances=10\'"),
+                        paste0("--conf \'spark.executor.memory=8G\'"))
+  
+} 
+##########################################################
+
+#####################Subsetting BAM files ################
+
+split_indir = rmdupdir
+split_outdir = "Splitfiles"
+split_suffix =".bam$"
+split_parallel_threads =10
+
+if(Do_chromosome_subset == "unmapped"){ 
+  subsetparams =paste("-b -f 4")
+} else if(Do_chromosome_subset == "ByChromosome"){
+  subsetparams =paste("-reference")
+}
+##########################################################
+
+if(Do_STAR =="yes"){
+  source(paste0(work_dir,"/STARscript.R"))
+
+#####Star Alignment Parameters (Change if necessary)####
   STARthreads = 10
   star_outdir ="BAM"
   BAM_output ="BAM SortedByCoordinate"
@@ -63,34 +113,29 @@ if(Do_STAR =="yes"){
                              "--alignSplicedMateMapLminOverLmate 0 --alignSplicedMateMapLmin 30")
     STARParameters =paste(STARParameters, star_add_params)
   }
-}
-
-###############Post-Alignment-Processing##################
-
-if(RM_duplicates_from_BAMs == "yes"){
-###############Deduplication of BAMs######################
   
-  rmdup_threads = 5
-  temp = "tempdir"
-  rmdupdir ="RMDups"
-  rmdup_params <- paste("--remove-sequencing-duplicates true",
-                        paste0("--conf \'spark.executor.cores=",rmdup_threads,"\'"),
-                        paste0("--conf \'spark.local.dir=",temp,"\'"),
-                        paste0("--conf \'spark.executor.instances=10\'"),
-                        paste0("--conf \'spark.executor.memory=8G\'"))
-} 
-
-#####################Subsetting BAM files ################
-
-split_indir = rmdupdir
-split_outdir = "Splitfiles"
-split_suffix =".bam$"
-split_parallel_threads =10
-
-if(Do_chromosome_subset == "unmapped"){ 
-  subsetparams =paste("-b -f 4")
-} else if(Do_chromosome_subset == "ByChromosome"){
-  subsetparams =paste("-reference")
+  ##############Running operation#######################
+  setwd(home_dir)
+  
+  environ_set_up()
+  
+  for (i in studies) {
+    setwd(i)
+    if(Do_STAR == "yes"){
+      mapRNAStudies(inputdir,study=i, IDX, star_outdir, parallel_threads =1) 
+    }
+    if(RM_duplicates_from_BAMs == "yes"){
+      dir.create(temp)
+      Add_ReadGroups(star_outdir,STARthreads)
+      rmdupPCR(star_outdir,rmdupdir)
+      unlink(temp, recursive=TRUE)
+      print(paste("for", i , "Reads deduplicated and Read groups assigned successfully!"))
+    }
+    if(Do_chromosome_subset =="unmapped" | Do_chromosome_subset == "ByChromosome"){
+      SplitBAM(split_indir,split_outdir)
+    }
+    setwd("..")
+  }
 }
 ##########################################################
 
@@ -115,10 +160,30 @@ gatkparams3 = paste("-R", ref_fasta,paste("-L",GATK_Intervals))
 gatkparams4 <- paste("-R", ref_fasta, "-window 35 -cluster 3 -filter-name \"Filter1\" -filter-expression \"QD < 2.0\" -filter-name \"Filter2\" -filter-expression \"FS > 30.0\"")
 
 
-if(RM_duplicates_from_BAMs == "yes" & Do_variant_call =="yes"){
-  GATK_input = rmdupdir
-} else if(RM_duplicates_from_BAMs == "no" & Do_variant_call =="yes"){
-  GATK_input = star_outdir
+if(Do_variant_call =="yes"){
+  if(RM_duplicates_from_BAMs == "yes"){
+    GATK_input = rmdupdir
+  } else {
+    GATK_input = star_outdir
+  }
+  
+  ##############Running operation#######################
+  setwd(home_dir)
+  
+  environ_set_up()
+  
+  for (i in studies) {
+    setwd(i)
+    if(Do_variant_call =="yes"){
+      GATK_CigarSplitter(GATK_input, GATK_outdir,GATK_suffix, GATK_parallel_threads)
+      GATK_BaseRecalibratorion(GATK_outdir, GATK_suffix)
+      GATK_ApplyBQSR(GATK_outdir, GATK_suffix1,GATK_suffix2)
+      GATK_HaploTypeCaller(GATK_outdir, GATK_suffix2)
+      GATK_SPLIT(GATK_outdir, GATK_suffix4 )
+      GATK_snpEff(GATK_outdir, GATK_suffix4 )
+    }
+    setwd(home_dir)
+  }
 }
 
 

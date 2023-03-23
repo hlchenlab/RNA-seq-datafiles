@@ -177,21 +177,3 @@ GATK_snpEff <- function(GATK_outdir, GATK_suffix4 ){
     
   }
 }
-##Running operation
-source("Alignment-params.txt")
-setwd(home_dir)
-
-environ_set_up()
-
-for (i in studies) {
-  setwd(i)
-  if(Do_variant_call =="yes"){
-    GATK_CigarSplitter(GATK_input, GATK_outdir,GATK_suffix, GATK_parallel_threads)
-    GATK_BaseRecalibratorion(GATK_outdir, GATK_suffix)
-    GATK_ApplyBQSR(GATK_outdir, GATK_suffix1,GATK_suffix2)
-    GATK_HaploTypeCaller(GATK_outdir, GATK_suffix2)
-    GATK_SPLIT(GATK_outdir, GATK_suffix4 )
-    GATK_snpEff(GATK_outdir, GATK_suffix4 )
-    }
-  setwd(home_dir)
-}

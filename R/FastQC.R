@@ -69,21 +69,3 @@ Trim_Fastq <- function(inputdir,trimoutdir){
   print(paste('Running:', cmd))
   system(paste(cmd))
 }
-
-##Running operation
-source("Alignment-params.txt")
-setwd(home_dir)
-
-environ_set_up()
-
-for (i in studies) {
-  setwd(i)
-  if(Do_FasQC_1 == "yes"){
-    FastQC_analysis(inputdir ='fastq',fastqc_out, fastqc_threads,report_out ="yes") 
-  }
-  if(Do_FastQC_Trim == "yes"){
-    Trim_Fastq(inputdir ='fastq', trimoutdir = 'FastqTrim')
-  }
-  setwd("..")
-}
-
